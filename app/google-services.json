@@ -1,0 +1,56 @@
+{
+  "project_info": {
+    "project_number": "413625786015",
+    "firebase_url": "https://organickart-2d08d-default-rtdb.firebaseio.com",
+    "project_id": "organickart-2d08d",
+    "storage_bucket": "organickart-2d08d.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:413625786015:android:fd1d73dcc35af2cdbdccaa",
+        "android_client_info": {
+          "package_name": "com.igdtuw.greenbasket"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "413625786015-p9301pk44oovjbp4ui8pu2tkgvb4cu0c.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.igdtuw.greenbasket",
+            "certificate_hash": "c9360e94bf776ba413ddf47d41870025daa44245"
+          }
+        },
+        {
+          "client_id": "413625786015-uoja67sarluq055mddkj67uspfong8b6.apps.googleusercontent.com",
+          "client_type": 1,
+          "android_info": {
+            "package_name": "com.igdtuw.greenbasket",
+            "certificate_hash": "9822a2ba94c53ba704e42a0b8fbac6783bc7084b"
+          }
+        },
+        {
+          "client_id": "413625786015-q9cqiafc4ggu27uq2uenmudu14lpj3fk.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAAB1uMH9VGYxmKgXz5XbAg9SZ0Nb9DtiQ"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "413625786015-q9cqiafc4ggu27uq2uenmudu14lpj3fk.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
