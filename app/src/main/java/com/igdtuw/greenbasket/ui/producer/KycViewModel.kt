@@ -19,7 +19,7 @@ import org.json.JSONObject
 class KycViewModel : ViewModel() {
 
     companion object {
-        private const val BASE_URL_CONSTANT = "http://192.168.1.107:5000/"
+        private const val BASE_URL_CONSTANT = "*********/"
     }
 
     private val _kycCompleted = MutableStateFlow(false)
