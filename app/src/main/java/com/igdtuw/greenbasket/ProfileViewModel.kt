@@ -86,12 +86,12 @@ class ProfileViewModel @Inject constructor(
     val db = Firebase.firestore
     private val BASE_URL_CONSTANT = "https://greenbasket-backend-1.onrender.com/"
     // Your backend IP address/URL. IMPORTANT: If testing on a physical device, this MUST be your computer's local IP (e.g., 192.168.x.x), NOT 10.0.2.2. If deployed, it's the public URL.
-    private val RAZORPAY_KEY_ID_CONSTANT = "rzp_test_0aXo9HpdFLy3A5" // Your Razorpay Test Key ID
+    private val RAZORPAY_KEY_ID_CONSTANT = "*********" // Your Razorpay Test Key ID
 
     // If you removed Cloudinary from BuildConfig as well, declare them here too:
-    private val CLOUDINARY_CLOUD_NAME_CONSTANT = "dgbtfbkk3"
-    private val CLOUDINARY_API_KEY_CONSTANT = "232892892248234"
-    private val CLOUDINARY_API_SECRET_CONSTANT = "FIClX_55z9XK91epx5IB-dZKmuQ" // VERY INSECURE if exposed in client-side code!
+    private val CLOUDINARY_CLOUD_NAME_CONSTANT = "*****"
+    private val CLOUDINARY_API_KEY_CONSTANT = "***********"
+    private val CLOUDINARY_API_SECRET_CONSTANT = "********" // VERY INSECURE if exposed in client-side code!
 
     // --- END HARDCODED VALUES ---
     private val _paymentStatusEvent = MutableSharedFlow<PaymentStatusEvent>()
