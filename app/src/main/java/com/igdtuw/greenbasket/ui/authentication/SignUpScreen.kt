@@ -23,10 +23,15 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import com.igdtuw.greenbasket.R
 import androidx.compose.ui.res.painterResource
+import androidx.lifecycle.viewmodel.compose.viewModel
+
 @Composable
 fun SignUpScreen(
     navController: NavController,
-    viewModel: AuthenticationViewModel
+    googleAuthUiClient: GoogleAuthUiClient,
+    viewModel: AuthenticationViewModel = viewModel(
+        factory = AuthenticationViewModelFactory(googleAuthUiClient)
+    )
 ) {
     val context = LocalContext.current
     val scrollState = rememberScrollState()

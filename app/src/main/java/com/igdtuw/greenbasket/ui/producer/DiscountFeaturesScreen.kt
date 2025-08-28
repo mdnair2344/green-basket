@@ -32,6 +32,12 @@ import java.time.LocalDate
 import java.time.format.DateTimeParseException
 import java.time.temporal.ChronoUnit
 import kotlin.random.Random
+import androidx.compose.ui.text.input.KeyboardType
+import android.app.DatePickerDialog
+import androidx.compose.foundation.clickable
+import androidx.compose.foundation.text.KeyboardOptions
+import java.util.Calendar
+
 
 data class DiscountOffer(
     val id: String = "DEAL${Random.nextInt(1000, 9999)}",
@@ -73,13 +79,53 @@ fun DiscountFeaturesScreen(onBack: () -> Unit = {}) {
             .collection("discount_offers")
             .addSnapshotListener { snapshot, e ->
                 if (e != null || snapshot == null) return@addSnapshotListener
-                offers.clear()
+
+                val today = LocalDate.now()
+                val toDeleteIds = mutableListOf<String>()
+                val fresh = mutableListOf<DiscountOffer>()
+
                 for (doc in snapshot.documents) {
-                    doc.toObject<DiscountOffer>()?.let { offers.add(it) }
+                    val offer = doc.toObject<DiscountOffer>() ?: continue
+                    val isExpiredOrInvalid = try {
+                        val end = LocalDate.parse(offer.validTill) // expects YYYY-MM-DD
+                        end.isBefore(today)                       // expired if before today
+                    } catch (_: Exception) {
+                        true // invalid date -> treat as expired/invalid and delete
+                    }
+
+                    if (isExpiredOrInvalid) {
+                        toDeleteIds += doc.id
+                    } else {
+                        fresh += offer
+                    }
+                }
+
+                // Update list with only valid, non-expired offers
+                offers.clear()
+                offers.addAll(fresh)
+
+                // Batch delete expired/invalid offers
+                if (toDeleteIds.isNotEmpty()) {
+                    val colRef = firestore.collection("producers")
+                        .document(producerUid)
+                        .collection("discount_offers")
+                    val batch = firestore.batch()
+                    toDeleteIds.forEach { id -> batch.delete(colRef.document(id)) }
+                    batch.commit()
+                        .addOnSuccessListener {
+                            Toast.makeText(
+                                context,
+                                "Removed ${toDeleteIds.size} expired offer(s).",
+                                Toast.LENGTH_SHORT
+                            ).show()
+                        }
+                    // You could add .addOnFailureListener { /* log or toast */ }
                 }
             }
+
         onDispose { listener.remove() }
     }
+
 
 
     Scaffold(
@@ -259,14 +305,23 @@ fun AddEditOfferDialog(
     val context = LocalContext.current
     val userId = FirebaseAuth.getInstance().currentUser?.uid ?: return
 
+    // ---------------- State ----------------
     var title by remember { mutableStateOf(existingOffer?.title ?: "") }
-    var discountValue by remember { mutableStateOf(existingOffer?.discountValue?.toString() ?: "") }
+    var discountValue by remember { mutableStateOf(existingOffer?.discountValue?.toInt()?.toString() ?: "") } // integer string
     var dateText by remember { mutableStateOf(existingOffer?.validTill ?: "") }
 
     var appliesToAll by remember { mutableStateOf(existingOffer?.appliesToAllCrops ?: false) }
     val cropList = remember { mutableStateListOf<String>() }
     val selectedCrops = remember { mutableStateListOf<String>() }
 
+    // Show errors only after Save is pressed
+    var showErrors by remember { mutableStateOf(false) }
+    var titleErr by remember { mutableStateOf<String?>(null) }
+    var discountErr by remember { mutableStateOf<String?>(null) }
+    var dateErr by remember { mutableStateOf<String?>(null) }
+    var cropsErr by remember { mutableStateOf<String?>(null) }
+
+    // Load producer crops
     LaunchedEffect(Unit) {
         FirebaseFirestore.getInstance()
             .collection("producers")
@@ -275,7 +330,11 @@ fun AddEditOfferDialog(
             .get()
             .addOnSuccessListener { snapshot ->
                 cropList.clear()
-                cropList.addAll(snapshot.documents.mapNotNull { it.getString("name") })
+                cropList.addAll(
+                    snapshot.documents.mapNotNull { it.getString("name") }
+                        .filter { !it.isNullOrBlank() }
+                        .map { it!! }
+                )
                 if (existingOffer != null && !existingOffer.appliesToAllCrops) {
                     selectedCrops.clear()
                     selectedCrops.addAll(existingOffer.cropNames)
@@ -283,47 +342,169 @@ fun AddEditOfferDialog(
             }
     }
 
+    // Calendar picker -> writes date as YYYY-MM-DD and disallows past dates
+    fun openDatePicker() {
+        val cal = Calendar.getInstance()
+
+        // Prefill with existing date if valid (keeps current selection)
+        runCatching {
+            if (dateText.isNotBlank()) {
+                val d = LocalDate.parse(dateText)
+                cal.set(Calendar.YEAR, d.year)
+                cal.set(Calendar.MONTH, d.monthValue - 1)
+                cal.set(Calendar.DAY_OF_MONTH, d.dayOfMonth)
+            }
+        }
+
+        val year = cal.get(Calendar.YEAR)
+        val month = cal.get(Calendar.MONTH)
+        val day = cal.get(Calendar.DAY_OF_MONTH)
+
+        val dpd = DatePickerDialog(
+            context,
+            { _, y, m, d ->
+                val picked = LocalDate.of(y, m + 1, d)
+                dateText = picked.toString() // ISO yyyy-MM-dd
+            },
+            year, month, day
+        )
+
+        // Disallow past dates (allows TODAY or later)
+        val min = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, 0)
+            set(Calendar.MINUTE, 0)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }.timeInMillis
+        dpd.datePicker.minDate = min
+
+        // If you want STRICTLY future (tomorrow and later), use this instead:
+        // dpd.datePicker.minDate = min + 24L * 60L * 60L * 1000L
+
+        dpd.show()
+    }
+
+
+    // ---------------- Validation ----------------
+    fun validate(): Boolean {
+        // Title: alphabets + spaces only
+        val titleTrim = title.trim()
+        titleErr = when {
+            titleTrim.isEmpty() -> "Title is required."
+            !titleTrim.matches(Regex("^[A-Za-z ]+\$")) -> "Only alphabets and spaces allowed."
+            else -> null
+        }
+
+        // Discount: integer 0..100
+        val dvInt = discountValue.toIntOrNull()
+        discountErr = when {
+            discountValue.isBlank() -> "Discount is required."
+            dvInt == null -> "Enter a whole number."
+            dvInt < 0 || dvInt > 100 -> "Discount must be between 0 and 100."
+            else -> null
+        }
+
+        // Date: must parse as LocalDate (format yyyy-MM-dd)
+        dateErr = try {
+            LocalDate.parse(dateText)
+            null
+        } catch (_: Exception) {
+            if (dateText.isBlank()) "End date is required." else "Date must be YYYY-MM-DD."
+        }
+
+        // Crops: if not appliesToAll -> must select at least one
+        cropsErr = if (!appliesToAll && selectedCrops.isEmpty()) {
+            "Select at least one crop or apply to all."
+        } else null
+
+        return listOf(titleErr, discountErr, dateErr, cropsErr).all { it == null }
+    }
+
     AlertDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
             TextButton(onClick = {
-                try {
-                    val date = LocalDate.parse(dateText)
-                    val promo = existingOffer?.promoCode ?: generatePromoCode(title, discountValue)
-                    val offer = DiscountOffer(
-                        id = existingOffer?.id ?: "DEAL${Random.nextInt(1000, 9999)}",
-                        title = title,
-                        discountValue = discountValue.toDoubleOrNull() ?: 0.0,
-                        promoCode = promo,
-                        validTill = date.toString(),
-                        appliesToAllCrops = appliesToAll,
-                        cropNames = if (appliesToAll) emptyList() else selectedCrops.toList()
-                    )
-                    onSave(offer)
-                } catch (e: Exception) {
-                    Toast.makeText(context, "Please check date or discount!", Toast.LENGTH_SHORT).show()
-                }
-            }) {
-                Text("Save")
-            }
+                showErrors = true
+                if (!validate()) return@TextButton
+
+                val promo = existingOffer?.promoCode ?: generatePromoCode(title, discountValue)
+                val dv = discountValue.toIntOrNull() ?: 0
+                val offer = DiscountOffer(
+                    id = existingOffer?.id ?: "DEAL${Random.nextInt(1000, 9999)}",
+                    title = title.trim(),
+                    discountValue = dv.toDouble(), // stored as Double but integer 0..100
+                    promoCode = promo,
+                    validTill = LocalDate.parse(dateText).toString(),
+                    appliesToAllCrops = appliesToAll,
+                    cropNames = if (appliesToAll) emptyList() else selectedCrops.toList()
+                )
+                onSave(offer)
+            }) { Text("Save") }
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
-        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
         title = { Text(if (existingOffer != null) "Edit Offer" else "Add Offer") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedTextField(value = title, onValueChange = { title = it }, label = { Text("Offer Title") })
+            Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+
+                // Title (alphabets & spaces)
+                OutlinedTextField(
+                    value = title,
+                    onValueChange = { title = it },
+                    label = { Text("Offer Title (alphabets only)") },
+                    isError = showErrors && titleErr != null,
+                    supportingText = {
+                        if (showErrors && titleErr != null)
+                            Text(titleErr!!, color = MaterialTheme.colorScheme.error)
+                    },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                // Discount % (digits only, 0..100)
                 OutlinedTextField(
                     value = discountValue,
-                    onValueChange = { discountValue = it },
-                    label = { Text("Discount Value (%)") },
-                    singleLine = true
+                    onValueChange = { new ->
+                        // allow digits only
+                        val cleaned = new.filter { it.isDigit() }
+                        // Optional: cap length to 3 to keep within 0..100
+                        discountValue = cleaned.take(3)
+                    },
+                    label = { Text("Discount Value (%) — 0 to 100") },
+                    isError = showErrors && discountErr != null,
+                    supportingText = {
+                        if (showErrors && discountErr != null)
+                            Text(discountErr!!, color = MaterialTheme.colorScheme.error)
+                    },
+                    singleLine = true,
+                    keyboardOptions = KeyboardOptions.Default.copy(
+                        keyboardType = KeyboardType.Number
+                    ),
+                    modifier = Modifier.fillMaxWidth()
                 )
-                OutlinedTextField(value = dateText, onValueChange = { dateText = it }, label = { Text("Valid Till (YYYY-MM-DD)") })
 
+                // Valid till (calendar picker)
+                OutlinedTextField(
+                    value = dateText,
+                    onValueChange = { /* read-only; set by picker */ },
+                    label = { Text("Valid Till (YYYY-MM-DD)") },
+                    isError = showErrors && dateErr != null,
+                    supportingText = {
+                        if (showErrors && dateErr != null)
+                            Text(dateErr!!, color = MaterialTheme.colorScheme.error)
+                    },
+                    singleLine = true,
+                    readOnly = true,
+                    trailingIcon = {
+                        IconButton(onClick = { openDatePicker() }) {
+                            Icon(Icons.Default.DateRange, contentDescription = "Pick date")
+                        }
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { openDatePicker() }
+                )
+
+                // Applies to all
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Checkbox(
                         checked = appliesToAll,
@@ -332,20 +513,24 @@ fun AddEditOfferDialog(
                     Text("Apply to all crops")
                 }
 
+                // Crop selection (required if not appliesToAll). No dropdowns—just simple checkboxes list.
                 if (!appliesToAll) {
                     Text("Select Crops", fontWeight = FontWeight.Bold)
+                    if (showErrors && cropsErr != null) {
+                        Text(cropsErr!!, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall)
+                        Spacer(Modifier.height(4.dp))
+                    }
                     LazyColumn(
                         modifier = Modifier
-                            .heightIn(max = 150.dp)
+                            .heightIn(max = 160.dp)
                             .fillMaxWidth()
                     ) {
                         items(cropList) { crop ->
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 Checkbox(
                                     checked = selectedCrops.contains(crop),
-                                    onCheckedChange = {
-                                        if (it) selectedCrops.add(crop)
-                                        else selectedCrops.remove(crop)
+                                    onCheckedChange = { checked ->
+                                        if (checked) selectedCrops.add(crop) else selectedCrops.remove(crop)
                                     }
                                 )
                                 Text(crop)
@@ -357,3 +542,4 @@ fun AddEditOfferDialog(
         }
     )
 }
+

@@ -1,5 +1,5 @@
 //ConsumerHomeScreen
-package com.igdtuw.greenbasket.ui.consumer
+package com.igdtuw.greenbasket.ui.theme.consumer
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -59,7 +59,7 @@ fun ConsumerHomeScreen(navController: NavController) {
             id = "dairy", text = "Shop Dairy Products",
             icon = Icons.Default.LocalDining, isImageVector = true,
             backgroundColor = ConsumerCardBackground4, iconColor = TextColorDark,
-            onClick = { navController.navigate("shop_category_screen/Dairy") }
+            onClick = { navController.navigate("shop_category_screen/Dairy Products") }
         ),
         ConsumerFeature(
             id = "pulses", text = "Shop Pulses",

@@ -22,6 +22,7 @@ import coil.compose.AsyncImage
 import androidx.compose.ui.Alignment
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.ui.text.font.FontWeight
 import com.igdtuw.greenbasket.ui.theme.ConsumerCardBackground1
 import com.igdtuw.greenbasket.ui.theme.ConsumerPrimaryVariant
@@ -97,6 +98,8 @@ fun ProfileScreen(viewModel: ProfileViewModel = hiltViewModel(), onBack: () -> U
     // State to manage which specific bank/card details are being viewed/edited
     var currentEditingBankDetails by remember { mutableStateOf<ProfileViewModel.BankDetails?>(null) }
     var currentEditingCard by remember { mutableStateOf<ProfileViewModel.Card?>(null) }
+    var showDeleteImageDialog by remember { mutableStateOf(false) }
+
 
 
 
@@ -114,6 +117,8 @@ fun ProfileScreen(viewModel: ProfileViewModel = hiltViewModel(), onBack: () -> U
         if (isAuthenticated) {
             pendingAction?.invoke()
             pendingAction = null
+        }else {
+            profileImageUri = null
         }
     }
 
@@ -184,21 +189,39 @@ fun ProfileScreen(viewModel: ProfileViewModel = hiltViewModel(), onBack: () -> U
                 .padding(innerPadding)
                 .padding(16.dp)
         ) {
-            AsyncImage(
-                model = profileImageUri ?: user.imageUri,
-                contentDescription = "Profile Image",
-                modifier = Modifier
-                    .size(120.dp)
-                    .clip(CircleShape)
-            )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                AsyncImage(
+                    model = profileImageUri ?: user.imageUri,
+                    contentDescription = "Profile Image",
+                    modifier = Modifier
+                        .size(120.dp)
+                        .clip(CircleShape)
+                )
+
+                Spacer(Modifier.width(12.dp))
+
+                // Bin button beside the circle
+                IconButton(
+                    onClick = { showDeleteImageDialog = true },
+                    enabled = (profileImageUri != null || user.imageUri.isNotBlank())
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Delete Profile Picture",
+                        tint = if (profileImageUri != null || user.imageUri.isNotBlank()) Color.Red else Color.Gray
+                    )
+                }
+            }
 
             TextButton(
-                onClick = {
-                    imagePickerLauncher.launch("image/*")
-                }
+                onClick = { imagePickerLauncher.launch("image/*") }
             ) {
                 Text("Change Profile Picture", color = ConsumerPrimaryVariant)
             }
+
 
             Spacer(modifier = Modifier.height(8.dp))
 

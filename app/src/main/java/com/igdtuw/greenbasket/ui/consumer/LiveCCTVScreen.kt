@@ -29,7 +29,7 @@ import com.igdtuw.greenbasket.ui.theme.ConsumerCardBackground1
 import com.igdtuw.greenbasket.ui.theme.GreenBasketTheme // Assuming your theme is here
 import com.igdtuw.greenbasket.ui.theme.ConsumerPrimaryVariant // Your custom green color
 
-data class Producer(
+data class ProducerCCTV(
     val producerId: String,
     val name: String,
     val description: String,
@@ -38,11 +38,11 @@ data class Producer(
 
 // Dummy data for producers with CCTV feeds
 val dummyProducersWithCCTV = listOf(
-    Producer("p1", "Farm Fresh Organics", "Organic fruits and vegetables", "https://example.com/cctv/farm1"),
-    Producer("p2", "Dairy Delights Co.", "Fresh milk and dairy products", "https://example.com/cctv/dairy2"),
-    Producer("p3", "Green Growers Farm", "Hydroponic leafy greens", "https://example.com/cctv/greenfarm3"),
-    Producer("p4", "Healthy Harvest", "Seasonal produce direct from farm", "https://example.com/cctv/harvest4"),
-    Producer("p5", "Sunrise Poultry", "Free-range eggs and poultry", "https://example.com/cctv/poultry5")
+    ProducerCCTV("p1", "Farm Fresh Organics", "Organic fruits and vegetables", "https://example.com/cctv/farm1"),
+    ProducerCCTV("p2", "Dairy Delights Co.", "Fresh milk and dairy products", "https://example.com/cctv/dairy2"),
+    ProducerCCTV("p3", "Green Growers Farm", "Hydroponic leafy greens", "https://example.com/cctv/greenfarm3"),
+    ProducerCCTV("p4", "Healthy Harvest", "Seasonal produce direct from farm", "https://example.com/cctv/harvest4"),
+    ProducerCCTV("p5", "Sunrise Poultry", "Free-range eggs and poultry", "https://example.com/cctv/poultry5")
 )
 
 @RequiresApi(Build.VERSION_CODES.O)
@@ -118,7 +118,7 @@ fun LiveCCTVScreen(navController: NavController) {
 }
 
 @Composable
-fun ProducerCCTVCard(producer: Producer, onClick: (Producer) -> Unit) {
+fun ProducerCCTVCard(producer: ProducerCCTV, onClick: (ProducerCCTV) -> Unit) {
     Card(
         modifier = Modifier
             .fillMaxWidth()

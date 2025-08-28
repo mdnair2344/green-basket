@@ -1,19 +1,24 @@
+//AuthenticationViewModel
 package com.igdtuw.greenbasket.ui.authentication
 
 import android.app.Activity
 import android.content.Context
+import android.util.Log
 import android.widget.Toast
 import androidx.lifecycle.ViewModel
+import androidx.lifecycle.ViewModelProvider
+import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.auth.api.signin.GoogleSignInAccount
 import com.google.firebase.FirebaseException
 import com.google.firebase.auth.*
 import com.google.firebase.firestore.FirebaseFirestore
 import java.util.concurrent.TimeUnit
 
-class AuthenticationViewModel : ViewModel() {
+class AuthenticationViewModel (private val googleAuthUiClient: GoogleAuthUiClient): ViewModel() {
 
     private val auth: FirebaseAuth = FirebaseAuth.getInstance()
     private val firestore: FirebaseFirestore = FirebaseFirestore.getInstance()
+
 
     fun signUpWithEmail(
         name: String,
@@ -61,7 +66,7 @@ class AuthenticationViewModel : ViewModel() {
             }
     }
 
-    fun signInWithEmail(
+    /*fun signInWithEmail(
         email: String,
         password: String,
         context: Context,
@@ -89,7 +94,43 @@ class AuthenticationViewModel : ViewModel() {
                     Toast.makeText(context, "Login failed: ${task.exception?.message}", Toast.LENGTH_LONG).show()
                 }
             }
+    }*/
+
+
+    fun signInWithEmail(email: String, password: String, context: Context, onResult: (String?) -> Unit) {
+        auth.signInWithEmailAndPassword(email, password)
+            .addOnSuccessListener { authResult ->
+                val user = authResult.user
+
+                // 🔄 Try to link with Google if previously signed in
+                val googleAccount =     GoogleSignIn.getLastSignedInAccount(context)
+                if (googleAccount != null && googleAccount.idToken != null) {
+                    val googleCredential = GoogleAuthProvider.getCredential(googleAccount.idToken, null)
+                    user?.linkWithCredential(googleCredential)
+                        ?.addOnSuccessListener {
+                            // Google account linked successfully
+                        }
+                        ?.addOnFailureListener {
+                            // Optional: Log this or show a toast if needed
+                        }
+                }
+
+                // Get user type from Firestore
+                firestore.collection("users").document(user!!.uid).get()
+                    .addOnSuccessListener { doc ->
+                        val userType = doc.getString("userType")
+                        onResult(userType)
+                    }
+                    .addOnFailureListener {
+                        onResult(null)
+                    }
+            }
+            .addOnFailureListener {
+                Toast.makeText(context, "Login failed: ${it.message}", Toast.LENGTH_SHORT).show()
+                onResult(null)
+            }
     }
+
 
     fun signInWithGoogle(
         account: GoogleSignInAccount,
@@ -101,6 +142,13 @@ class AuthenticationViewModel : ViewModel() {
     ) {
         val googleCredential = GoogleAuthProvider.getCredential(account.idToken, null)
         val currentUser = auth.currentUser
+        FirebaseAuth.getInstance().currentUser?.linkWithCredential(googleCredential)
+            ?.addOnSuccessListener {
+                Log.d("Auth", "Google account linked to email/pwd account")
+            }
+            ?.addOnFailureListener {
+                Log.e("Auth", "Failed to link Google: ${it.message}")
+            }
 
         if (currentUser != null) {
             currentUser.linkWithCredential(googleCredential)
@@ -288,6 +336,7 @@ class AuthenticationViewModel : ViewModel() {
 
     fun signOut(context: Context) {
         auth.signOut()
+        googleAuthUiClient.signOut { /* Optional: handle completion of Google sign out */ } // ✅ Add this line!
         val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
         prefs.edit().clear().apply()
     }
@@ -322,5 +371,18 @@ class AuthenticationViewModel : ViewModel() {
             .addOnFailureListener { exception ->
                 onError(exception.message ?: "Failed to fetch user type")
             }
+    }
+}
+
+
+class AuthenticationViewModelFactory(
+    private val googleAuthUiClient: GoogleAuthUiClient
+) : ViewModelProvider.Factory {
+    override fun <T : ViewModel> create(modelClass: Class<T>): T {
+        if (modelClass.isAssignableFrom(AuthenticationViewModel::class.java)) {
+            @Suppress("UNCHECKED_CAST")
+            return AuthenticationViewModel(googleAuthUiClient) as T
+        }
+        throw IllegalArgumentException("Unknown ViewModel class")
     }
 }

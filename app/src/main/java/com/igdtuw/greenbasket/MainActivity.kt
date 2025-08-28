@@ -54,9 +54,9 @@ class MainActivity : ComponentActivity(), PaymentResultListener {
             val auth = FirebaseAuth.getInstance()
             val prefs = getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
             val role = prefs.getString("role", null)
-            var startDestination = "splash"
+            //var startDestination = "splash"
 
-            startDestination = if (auth.currentUser != null && role != null) {
+            val startDestination = if (auth.currentUser != null && role != null) {
                 when (role.lowercase()) {
                     "consumer" -> "ConsumerHomeScreen"
                     "producer" -> "ProducerHomeScreen"
@@ -111,5 +111,3 @@ class MainActivity : ComponentActivity(), PaymentResultListener {
         return prefs.getString("role", null)
     }
 }
-
-

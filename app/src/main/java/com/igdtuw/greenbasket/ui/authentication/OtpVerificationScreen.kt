@@ -19,11 +19,15 @@ import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.PhoneAuthCredential
 import com.igdtuw.greenbasket.R
 import androidx.compose.ui.res.painterResource
+import androidx.lifecycle.viewmodel.compose.viewModel
 
 @Composable
 fun OtpVerificationScreen(
     navController: NavController,
-    viewModel: AuthenticationViewModel
+    googleAuthUiClient: GoogleAuthUiClient,
+    viewModel: AuthenticationViewModel = viewModel(
+        factory = AuthenticationViewModelFactory(googleAuthUiClient)
+    )
 ) {
     val context = LocalContext.current
     val activity = context as Activity

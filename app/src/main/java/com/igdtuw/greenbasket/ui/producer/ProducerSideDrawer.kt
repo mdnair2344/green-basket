@@ -35,7 +35,7 @@ fun ProducerSideDrawer(
     onCropCalendarClick: () -> Unit,
     onBulkOrderNotificationClick: () -> Unit,
     onAcceptRejectOrdersClick: () -> Unit,
-    onLiveChatClick: () -> Unit,
+    onConsumersChatClick: () -> Unit,
     onRestockClick: () -> Unit,
     onNearbyProducersClick: () -> Unit,
     onUploadMediaClick: () -> Unit,
@@ -51,17 +51,22 @@ fun ProducerSideDrawer(
     var imageUri by remember { mutableStateOf<String?>(null) }
 
     // Fetch the name from Firestore
-    LaunchedEffect(uid) {
-        uid?.let {
+    DisposableEffect(uid) {
+        if (uid == null) {
+            onDispose { }
+        } else {
             val db = FirebaseFirestore.getInstance()
-            try {
-                val doc = db.collection("users").document(uid).get().await()
-                firestoreName = doc.getString("name") ?: "Producer"
-                imageUri = doc.getString("imageUri")
-            } catch (e: Exception) {
-                firestoreName = "Producer"
-                imageUri = null
-            }
+            val registration = db.collection("users").document(uid)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        // optionally log error
+                        return@addSnapshotListener
+                    }
+                    firestoreName = snapshot?.getString("name") ?: "Producer"
+                    val url = snapshot?.getString("imageUri")
+                    imageUri = if (url.isNullOrBlank()) null else url
+                }
+            onDispose { registration.remove() }
         }
     }
 
@@ -72,7 +77,8 @@ fun ProducerSideDrawer(
             .fillMaxHeight()
             .width(280.dp)
             .background(Color.White)
-            .padding(vertical = 16.dp)
+            .padding(vertical = 16.dp),
+        contentPadding = PaddingValues(bottom = 32.dp)
     ) {
         // Profile Section
         item {
@@ -134,10 +140,10 @@ fun ProducerSideDrawer(
             ProducerSidebarItem(Icons.Default.Inventory, "Inventory", onInventoryClick)
             ProducerSidebarItem(Icons.Default.Notifications, "Bulk Orders", onBulkOrderNotificationClick)
             ProducerSidebarItem(Icons.Default.LocalShipping, "Accept/Reject Orders", onAcceptRejectOrdersClick)
-            ProducerSidebarItem(Icons.Default.Chat, "Live Chat", onLiveChatClick)
+            ProducerSidebarItem(Icons.Default.Chat, "Chat with Consumers", onConsumersChatClick)
             ProducerSidebarItem(Icons.Default.Restore, "Restock", onRestockClick)
             ProducerSidebarItem(Icons.Default.CalendarToday, "Crop Stage", onCropCalendarClick)
-            ProducerSidebarItem(Icons.Default.LocationOn, "Nearby Producers", onNearbyProducersClick)
+            ProducerSidebarItem(Icons.Default.Group, "Community Network", onNearbyProducersClick)
             ProducerSidebarItem(Icons.Default.UploadFile, "Upload Certificates", onUploadMediaClick)
             ProducerSidebarItem(Icons.Default.LocalOffer, "Discount Features", onDiscountFeaturesClick)
             ProducerSidebarItem(Icons.Default.Slideshow, "Demo Guidance Video", onDemoGuidanceClick)
@@ -146,7 +152,6 @@ fun ProducerSideDrawer(
             ProducerSidebarItem(Icons.Default.Settings, "Settings", onSettingsClick)
             ProducerSidebarItem(Icons.Default.Logout, "Logout", onLogoutClick)
         }
-        item{Spacer(modifier = Modifier.width(50.dp))}
     }
 
 }
@@ -186,7 +191,7 @@ fun PreviewProducerSideDrawer() {
         onCropCalendarClick = {},
         onBulkOrderNotificationClick = {},
         onAcceptRejectOrdersClick = {},
-        onLiveChatClick = {},
+        onConsumersChatClick = {},
         onRestockClick = {},
         onNearbyProducersClick = {},
         onUploadMediaClick = {},

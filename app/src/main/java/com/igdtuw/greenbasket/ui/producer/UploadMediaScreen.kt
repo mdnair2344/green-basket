@@ -38,6 +38,18 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 import java.time.LocalDate
 import java.time.format.DateTimeFormatter
+import androidx.compose.material3.DatePicker
+import androidx.compose.material3.DatePickerDialog
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.rememberDatePickerState
+import java.time.Instant
+import java.time.ZoneId
 
 
 data class Certificate(
@@ -267,70 +279,326 @@ fun UploadCertificateDialog(
 ) {
     val context = LocalContext.current
 
+    // --- Field state ---
     var name by remember { mutableStateOf("") }
     var description by remember { mutableStateOf("") }
-    var issueDate by remember { mutableStateOf("") }
-    var expiryDate by remember { mutableStateOf("") }
-    var authority by remember { mutableStateOf("") }
-    var category by remember { mutableStateOf("") }
+
+    // Category dropdown
+    val categoryOptions = listOf(
+        "Organic", "ISO 22000", "HACCP", "FSSAI", "Fair Trade", "GAP",
+        "Halal", "Kosher", "Non-GMO", "Other"
+    )
+    var categoryExpanded by remember { mutableStateOf(false) }
+    var categoryChoice by remember { mutableStateOf("") }
+    var customCategory by remember { mutableStateOf("") }
+
+    // Authority dropdown
+    val authorityOptions = listOf(
+        "FSSAI", "APEDA", "ISO", "BIS", "NABL", "USDA Organic",
+        "EU Organic", "State Agriculture Dept", "Other"
+    )
+    var authorityExpanded by remember { mutableStateOf(false) }
+    var authorityChoice by remember { mutableStateOf("") }
+    var customAuthority by remember { mutableStateOf("") }
+
+    // Date picking state
+    val dateFormatter = remember { DateTimeFormatter.ofPattern("yyyy-MM-dd") }
+
+    var issuePickerOpen by remember { mutableStateOf(false) }
+    var expiryPickerOpen by remember { mutableStateOf(false) }
+
+    var issueEpoch by remember { mutableStateOf<Long?>(null) }
+    var expiryEpoch by remember { mutableStateOf<Long?>(null) }
+
+    fun epochToLocalDateString(epoch: Long?): String {
+        if (epoch == null) return ""
+        val ld = Instant.ofEpochMilli(epoch).atZone(ZoneId.systemDefault()).toLocalDate()
+        return ld.format(dateFormatter)
+    }
+
+    // File
     var fileUri by remember { mutableStateOf<Uri?>(null) }
     var isUploading by remember { mutableStateOf(false) }
-
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         fileUri = uri
     }
 
+    // --- Validation helpers ---
+    fun isValidRequiredText(s: String, min: Int = 3) = s.trim().length >= min
+    var nameError by remember { mutableStateOf<String?>(null) }
+    var categoryError by remember { mutableStateOf<String?>(null) }
+    var authorityError by remember { mutableStateOf<String?>(null) }
+    var issueError by remember { mutableStateOf<String?>(null) }
+    var expiryError by remember { mutableStateOf<String?>(null) }
+    var crossDateError by remember { mutableStateOf<String?>(null) }
+    var fileError by remember { mutableStateOf<String?>(null) }
+
+    fun validateAll(): Boolean {
+        var ok = true
+        nameError = if (!isValidRequiredText(name)) { ok = false; "Enter at least 3 characters." } else null
+
+        // Category
+        val finalCategory = if (categoryChoice == "Other") customCategory else categoryChoice
+        categoryError = when {
+            categoryChoice.isBlank() -> { ok = false; "Select a category." }
+            categoryChoice == "Other" && !isValidRequiredText(customCategory) -> { ok = false; "Specify the category." }
+            else -> null
+        }
+
+        // Authority
+        val finalAuthority = if (authorityChoice == "Other") customAuthority else authorityChoice
+        authorityError = when {
+            authorityChoice.isBlank() -> { ok = false; "Select an issuing authority." }
+            authorityChoice == "Other" && !isValidRequiredText(customAuthority) -> { ok = false; "Specify the authority." }
+            else -> null
+        }
+
+        // Dates
+        issueError = if (issueEpoch == null) { ok = false; "Select an issue date." } else null
+        expiryError = if (expiryEpoch == null) { ok = false; "Select an expiry date." } else null
+
+        crossDateError = null
+        if (issueEpoch != null && expiryEpoch != null) {
+            val issueDate = Instant.ofEpochMilli(issueEpoch!!).atZone(ZoneId.systemDefault()).toLocalDate()
+            val expiryDate = Instant.ofEpochMilli(expiryEpoch!!).atZone(ZoneId.systemDefault()).toLocalDate()
+            if (!issueDate.isBefore(expiryDate)) {
+                ok = false
+                crossDateError = "Issue date must be **before** expiry date."
+            }
+        }
+
+        fileError = if (fileUri == null) { ok = false; "Please select a certificate file." } else null
+
+        return ok
+    }
+
+    // --- UI ---
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("Upload Producer Certificate") },
         text = {
             Column {
-                fun modifier() = Modifier
-                    .fillMaxWidth()
-                val colors = OutlinedTextFieldDefaults.colors(
+                fun modifier() = Modifier.fillMaxWidth()
+                val fieldColors = OutlinedTextFieldDefaults.colors(
                     focusedBorderColor = DarkGreen,
                     cursorColor = DarkGreen,
                     focusedLabelColor = DarkGreen
                 )
 
-                OutlinedTextField(name, { name = it }, label = { Text("Certificate Name") }, modifier = modifier(), colors = colors)
-                OutlinedTextField(description, { description = it }, label = { Text("Description (Optional)") }, modifier = modifier(), colors = colors)
-                OutlinedTextField(category, { category = it }, label = { Text("Category (e.g., Organic, ISO)") }, modifier = modifier(), colors = colors)
-                OutlinedTextField(issueDate, { issueDate = it }, label = { Text("Issue Date (YYYY-MM-DD)") }, modifier = modifier(), colors = colors)
-                OutlinedTextField(expiryDate, { expiryDate = it }, label = { Text("Expiry Date (YYYY-MM-DD)") }, modifier = modifier(), colors = colors)
-                OutlinedTextField(authority, { authority = it }, label = { Text("Issued By Authority") }, modifier = modifier(), colors = colors)
+                // Name
+                OutlinedTextField(
+                    value = name,
+                    onValueChange = {
+                        name = it
+                        if (nameError != null) nameError = null
+                    },
+                    label = { Text("Certificate Name*") },
+                    isError = nameError != null,
+                    supportingText = { nameError?.let { Text(it, color = MaterialTheme.colorScheme.error) } },
+                    singleLine = true,
+                    modifier = modifier(),
+                    colors = fieldColors
+                )
 
+                // Description (optional)
+                OutlinedTextField(
+                    value = description,
+                    onValueChange = { description = it },
+                    label = { Text("Description (Optional)") },
+                    modifier = modifier(),
+                    colors = fieldColors
+                )
+
+                Spacer(Modifier.height(4.dp))
+
+                // Category dropdown
+                ExposedDropdownMenuBox(
+                    expanded = categoryExpanded,
+                    onExpandedChange = { categoryExpanded = !categoryExpanded },
+                    modifier = modifier()
+                ) {
+                    OutlinedTextField(
+                        value = if (categoryChoice.isBlank()) "" else categoryChoice,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Category*") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = categoryExpanded) },
+                        isError = categoryError != null,
+                        supportingText = { categoryError?.let { Text(it, color = MaterialTheme.colorScheme.error) } },
+                        modifier = Modifier
+                            .menuAnchor()
+                            .fillMaxWidth(),
+                        colors = fieldColors
+                    )
+                    ExposedDropdownMenu(
+                        expanded = categoryExpanded,
+                        onDismissRequest = { categoryExpanded = false }
+                    ) {
+                        categoryOptions.forEach { option ->
+                            DropdownMenuItem(
+                                text = { Text(option) },
+                                onClick = {
+                                    categoryChoice = option
+                                    categoryExpanded = false
+                                    categoryError = null
+                                    if (option != "Other") customCategory = ""
+                                }
+                            )
+                        }
+                    }
+                }
+
+                if (categoryChoice == "Other") {
+                    OutlinedTextField(
+                        value = customCategory,
+                        onValueChange = {
+                            customCategory = it
+                            categoryError = null
+                        },
+                        label = { Text("Specify Category*") },
+                        isError = categoryError != null,
+                        supportingText = { categoryError?.let { Text(it, color = MaterialTheme.colorScheme.error) } },
+                        singleLine = true,
+                        modifier = modifier(),
+                        colors = fieldColors
+                    )
+                }
+
+                Spacer(Modifier.height(4.dp))
+
+                // Authority dropdown
+                ExposedDropdownMenuBox(
+                    expanded = authorityExpanded,
+                    onExpandedChange = { authorityExpanded = !authorityExpanded },
+                    modifier = modifier()
+                ) {
+                    OutlinedTextField(
+                        value = if (authorityChoice.isBlank()) "" else authorityChoice,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Issued By Authority*") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = authorityExpanded) },
+                        isError = authorityError != null,
+                        supportingText = { authorityError?.let { Text(it, color = MaterialTheme.colorScheme.error) } },
+                        modifier = Modifier
+                            .menuAnchor()
+                            .fillMaxWidth(),
+                        colors = fieldColors
+                    )
+                    ExposedDropdownMenu(
+                        expanded = authorityExpanded,
+                        onDismissRequest = { authorityExpanded = false }
+                    ) {
+                        authorityOptions.forEach { option ->
+                            DropdownMenuItem(
+                                text = { Text(option) },
+                                onClick = {
+                                    authorityChoice = option
+                                    authorityExpanded = false
+                                    authorityError = null
+                                    if (option != "Other") customAuthority = ""
+                                }
+                            )
+                        }
+                    }
+                }
+
+                if (authorityChoice == "Other") {
+                    OutlinedTextField(
+                        value = customAuthority,
+                        onValueChange = {
+                            customAuthority = it
+                            authorityError = null
+                        },
+                        label = { Text("Specify Authority*") },
+                        isError = authorityError != null,
+                        supportingText = { authorityError?.let { Text(it, color = MaterialTheme.colorScheme.error) } },
+                        singleLine = true,
+                        modifier = modifier(),
+                        colors = fieldColors
+                    )
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                // Issue Date picker trigger
+                Text("Issue Date*", fontWeight = FontWeight.SemiBold)
+                OutlinedButton(
+                    onClick = { issuePickerOpen = true },
+                    modifier = modifier()
+                ) {
+                    Text(epochToLocalDateString(issueEpoch) .ifEmpty { "Select issue date" })
+                }
+                if (issueError != null) {
+                    Text(issueError!!, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                }
+
+                Spacer(Modifier.height(6.dp))
+
+                // Expiry Date picker trigger
+                Text("Expiry Date*", fontWeight = FontWeight.SemiBold)
+                OutlinedButton(
+                    onClick = { expiryPickerOpen = true },
+                    modifier = modifier()
+                ) {
+                    Text(epochToLocalDateString(expiryEpoch) .ifEmpty { "Select expiry date" })
+                }
+                if (expiryError != null) {
+                    Text(expiryError!!, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                }
+
+                if (crossDateError != null) {
+                    Spacer(Modifier.height(4.dp))
+                    Text(crossDateError!!, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
+                }
+
+                Spacer(Modifier.height(8.dp))
+
+                // File picker
                 Button(
                     onClick = { launcher.launch(arrayOf("application/pdf", "image/*")) },
-                    modifier = Modifier.padding(top = 8.dp),
                     colors = ButtonDefaults.buttonColors(containerColor = DarkGreen, contentColor = Color.White)
                 ) {
                     Text("Select Certificate File")
                 }
-
-                fileUri?.let {
-                    Text("Selected: ${it.lastPathSegment ?: "File"}", style = MaterialTheme.typography.bodySmall, color = Color.Gray)
+                if (fileUri != null) {
+                    Text(
+                        "Selected: ${fileUri!!.lastPathSegment ?: "File"}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+                }
+                if (fileError != null) {
+                    Text(fileError!!, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
                 }
             }
         },
         confirmButton = {
             Button(
                 onClick = {
-                    if (fileUri == null || name.isBlank() || issueDate.isBlank() || expiryDate.isBlank() || authority.isBlank() || category.isBlank()) {
-                        Toast.makeText(context, "Please fill all required fields", Toast.LENGTH_SHORT).show()
-                        return@Button
-                    }
-                    val formatter = DateTimeFormatter.ofPattern("yyyy-MM-dd")
-                    val issue = runCatching { LocalDate.parse(issueDate, formatter) }.getOrNull()
-                    val expiry = runCatching { LocalDate.parse(expiryDate, formatter) }.getOrNull()
+                    // Validate all fields first
+                    if (!validateAll()) return@Button
 
-                    if (issue == null || expiry == null) {
-                        Toast.makeText(context, "Invalid date format. Use YYYY-MM-DD.", Toast.LENGTH_SHORT).show()
-                        return@Button
-                    }
+                    // Build final values
+                    val finalCategory = if (categoryChoice == "Other") customCategory.trim() else categoryChoice.trim()
+                    val finalAuthority = if (authorityChoice == "Other") customAuthority.trim() else authorityChoice.trim()
 
-                    val status = if (expiry.isAfter(LocalDate.now())) "Valid" else "Expired"
-                    val certData = Certificate(name, description, issueDate, expiryDate, authority, status, category = category)
+                    val issueDate = Instant.ofEpochMilli(issueEpoch!!).atZone(ZoneId.systemDefault()).toLocalDate()
+                    val expiryDate = Instant.ofEpochMilli(expiryEpoch!!).atZone(ZoneId.systemDefault()).toLocalDate()
+
+                    // Status (based on expiry vs today)
+                    val status = if (expiryDate.isAfter(LocalDate.now())) "Valid" else "Expired"
+
+                    // Create Certificate using **named** args to avoid mis-mapping
+                    val certData = Certificate(
+                        name = name.trim(),
+                        description = description.trim(),
+                        issueDate = issueDate.format(dateFormatter),
+                        expiryDate = expiryDate.format(dateFormatter),
+                        authority = finalAuthority,
+                        status = status,
+                        category = finalCategory
+                    )
 
                     isUploading = true
                     onUpload(certData, fileUri!!)
@@ -346,9 +614,51 @@ fun UploadCertificateDialog(
             }
         },
         dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("Cancel")
-            }
+            TextButton(onClick = onDismiss) { Text("Cancel") }
         }
     )
+
+    // --- DatePicker Dialogs ---
+
+    if (issuePickerOpen) {
+        val state = rememberDatePickerState(
+            initialSelectedDateMillis = issueEpoch ?: System.currentTimeMillis()
+        )
+        DatePickerDialog(
+            onDismissRequest = { issuePickerOpen = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    issueEpoch = state.selectedDateMillis
+                    issuePickerOpen = false
+                    // Clear cross-field error if previously set
+                    crossDateError = null
+                    issueError = null
+                }) { Text("OK", color = DarkGreen) }
+            },
+            dismissButton = { TextButton(onClick = { issuePickerOpen = false }) { Text("Cancel") } }
+        ) {
+            DatePicker(state = state)
+        }
+    }
+
+    if (expiryPickerOpen) {
+        val state = rememberDatePickerState(
+            initialSelectedDateMillis = expiryEpoch ?: System.currentTimeMillis()
+        )
+        DatePickerDialog(
+            onDismissRequest = { expiryPickerOpen = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    expiryEpoch = state.selectedDateMillis
+                    expiryPickerOpen = false
+                    crossDateError = null
+                    expiryError = null
+                }) { Text("OK", color = DarkGreen) }
+            },
+            dismissButton = { TextButton(onClick = { expiryPickerOpen = false }) { Text("Cancel") } }
+        ) {
+            DatePicker(state = state)
+        }
+    }
 }
+

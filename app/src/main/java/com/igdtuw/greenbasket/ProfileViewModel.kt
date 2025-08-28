@@ -39,6 +39,7 @@ import kotlinx.coroutines.withContext
 import org.json.JSONException
 import kotlinx.coroutines.tasks.await
 import com.igdtuw.greenbasket.ui.producer.uploadToCloudinary
+import java.util.concurrent.TimeUnit
 import kotlin.text.get
 
 
@@ -396,33 +397,48 @@ class ProfileViewModel @Inject constructor(
 
 
     fun removeProfileImage(context: Context) {
-        val userId = auth.currentUser?.uid ?: return
+        val userId = auth.currentUser?.uid ?: run {
+            Toast.makeText(context, "Not signed in", Toast.LENGTH_SHORT).show()
+            return
+        }
         val userDoc = firestore.collection("users").document(userId)
 
         viewModelScope.launch {
             try {
                 val currentImageUri = _userDetails.value.imageUri
-
-                val publicId = extractPublicIdFromUrl(currentImageUri)
-                if (publicId != null) {
-                    deleteImageFromCloudinary(publicId)
+                if (currentImageUri.isNullOrBlank()) {
+                    Toast.makeText(context, "No profile picture to remove", Toast.LENGTH_SHORT).show()
+                    return@launch
                 }
 
-                userDoc.update("imageUri", "")
-                    .addOnSuccessListener {
-                        _userDetails.update { it.copy(imageUri = "") }
-                        Toast.makeText(context, "Profile picture removed", Toast.LENGTH_SHORT).show()
+                // Prefer reading a stored publicId field if you saved it during upload
+                val publicId = extractPublicIdFromUrl(currentImageUri)
+
+                // 1) Delete from Cloudinary (IO thread)
+                if (publicId != null) {
+                    val deleted = deleteImageFromCloudinary(publicId) // suspend
+                    if (!deleted) {
+                        // You can still continue to clear Firestore if you want even if CDN delete failed
+                        Log.w("Cloudinary", "Deletion API returned failure for publicId=$publicId")
                     }
-                    .addOnFailureListener { e ->
-                        Log.e("ProfileViewModel", "Error updating Firestore", e)
-                        Toast.makeText(context, "Failed to update profile", Toast.LENGTH_SHORT).show()
-                    }
+                } else {
+                    Log.w("Cloudinary", "publicId could not be derived from URL — skipping Cloudinary delete")
+                }
+
+                // 2) Clear Firestore (await)
+                userDoc.update("imageUri", "").await()
+
+                // 3) Update local state so UI refreshes
+                _userDetails.update { it.copy(imageUri = "") }
+
+                Toast.makeText(context, "Profile picture removed", Toast.LENGTH_SHORT).show()
             } catch (e: Exception) {
                 Log.e("ProfileViewModel", "Exception while removing image", e)
                 Toast.makeText(context, "Something went wrong", Toast.LENGTH_SHORT).show()
             }
         }
     }
+
 
     private fun extractPublicIdFromUrl(url: String): String? {
         return try {
@@ -436,22 +452,24 @@ class ProfileViewModel @Inject constructor(
         }
     }
 
-    private suspend fun deleteImageFromCloudinary(publicId: String) {
+    private suspend fun deleteImageFromCloudinary(publicId: String): Boolean = withContext(Dispatchers.IO) {
         try {
-            // Using HARDCODED values for Cloudinary credentials
             val cloudName = CLOUDINARY_CLOUD_NAME_CONSTANT
             val apiKey = CLOUDINARY_API_KEY_CONSTANT
             val apiSecret = CLOUDINARY_API_SECRET_CONSTANT
 
-            if (cloudName.isBlank() || apiKey.isBlank() || apiSecret.isBlank() || cloudName == "your_cloudinary_cloud_name_HERE") {
-                Log.e("Cloudinary", "Cloudinary API credentials not set directly in ProfileViewModel.kt.")
-                return // Prevent API call if credentials are not set
+            if (cloudName.isBlank() || apiKey.isBlank() || apiSecret.isBlank() ||
+                cloudName == "your_cloudinary_cloud_name_HERE") {
+                Log.e("Cloudinary", "Cloudinary credentials are not set.")
+                return@withContext false
             }
 
             val timestamp = (System.currentTimeMillis() / 1000).toString()
-            // Signature generation must use the API Secret
+
+            // signature = sha1("public_id=<id>&timestamp=<ts><api_secret>")
+            val sigBase = "public_id=$publicId&timestamp=$timestamp$apiSecret"
             val signature = MessageDigest.getInstance("SHA-1")
-                .digest("public_id=$publicId&timestamp=$timestamp$apiSecret".toByteArray())
+                .digest(sigBase.toByteArray())
                 .joinToString("") { "%02x".format(it) }
 
             val requestBody = FormBody.Builder()
@@ -459,6 +477,7 @@ class ProfileViewModel @Inject constructor(
                 .add("timestamp", timestamp)
                 .add("api_key", apiKey)
                 .add("signature", signature)
+                .add("invalidate", "true") // optional but useful
                 .build()
 
             val request = Request.Builder()
@@ -466,18 +485,27 @@ class ProfileViewModel @Inject constructor(
                 .post(requestBody)
                 .build()
 
-            val client = OkHttpClient()
-            val response = client.newCall(request).execute()
+            val client = OkHttpClient.Builder()
+                .connectTimeout(15, TimeUnit.SECONDS)
+                .readTimeout(30, TimeUnit.SECONDS)
+                .writeTimeout(30, TimeUnit.SECONDS)
+                .build()
 
-            if (!response.isSuccessful) {
-                Log.e("Cloudinary", "Failed to delete image: ${response.message}. Response body: ${response.body?.string()}")
-            } else {
-                Log.d("Cloudinary", "Image deleted successfully: $publicId")
+            client.newCall(request).execute().use { resp ->
+                if (!resp.isSuccessful) {
+                    Log.e("Cloudinary", "Failed: code=${resp.code}, message=${resp.message}, body=${resp.body?.string()}")
+                    return@withContext false
+                }
             }
+
+            Log.d("Cloudinary", "Deleted image: $publicId")
+            true
         } catch (e: Exception) {
             Log.e("Cloudinary", "Exception in image deletion", e)
+            false
         }
     }
+
 
     fun updateBasicInfo(name: String, phone: String, address: String, context: Context) {
         val uid = auth.currentUser?.uid ?: return

@@ -32,17 +32,15 @@ import androidx.hilt.navigation.compose.hiltViewModel
 import com.google.firebase.firestore.FirebaseFirestore
 import com.igdtuw.greenbasket.ui.theme.ConsumerPrimaryVariant
 import kotlinx.coroutines.tasks.await
+import kotlinx.coroutines.withContext
 
-fun getCategoryIcon(category: String): ImageVector {
-    return when (category.lowercase()) {
-        "fruits" -> Icons.Default.Eco
-        "vegetables" -> Icons.Default.LocalFlorist
-        "grains" -> Icons.Default.Spa
-        "dairy" -> Icons.Default.LocalDining
-        "herbs" -> Icons.Default.Grass
-        "organic" -> Icons.Default.EnergySavingsLeaf
-        else -> Icons.Default.ShoppingCart
-    }
+fun getCategoryIcon(category: String): ImageVector = when (category.trim().lowercase()) {
+    "fruits" -> Icons.Default.Eco
+    "vegetables" -> Icons.Default.Grass
+    "grains" -> Icons.Default.Grain
+    "dairy", "dairy products" -> Icons.Default.LocalDrink
+    "pulses" -> Icons.Default.RiceBowl
+    else -> Icons.Default.ShoppingCart
 }
 
 
@@ -105,7 +103,7 @@ fun ShopCategoryScreen(
             } catch (e: Exception) {
                 errorMessage = "Error loading crops: ${e.message}"
                 isLoading = false
-                with(Dispatchers.Main) {
+                withContext(Dispatchers.Main) {
                     Toast.makeText(context, errorMessage, Toast.LENGTH_LONG).show()
                 }
             }

@@ -3,6 +3,7 @@ package com.igdtuw.greenbasket.ui.consumer
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.Intent
 import android.os.Build
 import android.provider.Settings.Global.getString
 import android.util.Log
@@ -33,11 +34,13 @@ import com.igdtuw.greenbasket.ProfileScreen
 import com.igdtuw.greenbasket.ProfileViewModel
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.navigation.NavHostController
 import com.google.firebase.auth.FirebaseAuth
 import com.igdtuw.greenbasket.UnderDevelopmentDialog
 import com.igdtuw.greenbasket.ui.authentication.GoogleAuthUiClient
 import com.igdtuw.greenbasket.ui.authentication.LoginScreen
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
+import com.igdtuw.greenbasket.MainActivity
 import com.igdtuw.greenbasket.R
 import com.igdtuw.greenbasket.navigation.SplashScreen
 import kotlinx.coroutines.delay
@@ -130,7 +133,7 @@ fun ConsumerApp() {
                 composable("about_us_screen") { PolicyScreen("About Us", aboutUsContent,navController) }
 
 
-                composable(Routes.Chat) { UnderDevelopmentDialog(navController) }
+                composable(Routes.Chat) { ProducerChatsScreen(sharedViewModel, onBack = { navController.popBackStack() })}
                 composable(
                     route = "my_reviews_screen/{consumerId}",
                     arguments = listOf(navArgument("consumerId") { type = NavType.StringType })
@@ -224,7 +227,7 @@ fun ConsumerApp() {
 
 
                 composable("chat_with_producers") {
-                    UnderDevelopmentDialog(navController)
+                    ProducerChatsScreen(sharedViewModel, onBack = { navController.popBackStack() })
                 }
 
                 composable("select_address") {
@@ -286,25 +289,60 @@ fun ConsumerApp() {
                 }
 
 
+                /*composable("logout") {
+                    val context = LocalContext.current
+
+                    LaunchedEffect(Unit) {
+                        FirebaseAuth.getInstance().signOut()
+                        val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+                        prefs.edit().clear().apply()
+
+                        delay(200)
+
+                        // Restart activity to trigger fresh NavGraph setup
+                        val intent = Intent(context, MainActivity::class.java)
+                        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                        context.startActivity(intent)
+                    }
+
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                }*/
+
+
+
                 composable("logout") {
                     val context = LocalContext.current
 
                     LaunchedEffect(Unit) {
-                        FirebaseAuth.getInstance().signOut()  // ✅ Firebase logout
-                        val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
-                        prefs.edit().clear().apply()          // ✅ Clear prefs
+                        // Sign out the Firebase user (this also removes Google session)
+                        FirebaseAuth.getInstance().signOut()
 
-                        delay(200) // ⏳ Give FirebaseAuth time to reflect logout
-                        navController.navigate("LoginScreen") {
-                            popUpTo(navController.graph.startDestinationId) { inclusive = true }
-                            launchSingleTop = true
-                        }
+                        // Only remove role
+                        val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+                        prefs.edit().remove("role").apply()
+
+                        delay(200)
+
+                        // Restart activity to clear backstack
+                        val intent = Intent(context, MainActivity::class.java)
+                        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                        context.startActivity(intent)
                     }
 
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
                         CircularProgressIndicator()
                     }
                 }
+
+
 
 
 

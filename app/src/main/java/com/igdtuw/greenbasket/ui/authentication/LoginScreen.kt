@@ -1,6 +1,7 @@
 //LoginScreen
 package com.igdtuw.greenbasket.ui.authentication
 
+import android.content.Context
 import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -21,9 +22,12 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.res.painterResource
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.google.android.gms.auth.api.signin.GoogleSignIn
 import com.google.android.gms.common.api.ApiException
+import com.google.firebase.auth.EmailAuthProvider
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.auth.GoogleAuthProvider
 import com.igdtuw.greenbasket.R
 
@@ -31,17 +35,22 @@ import com.igdtuw.greenbasket.R
 // Define your custom dark green color
 val DarkGreen = Color(0xFF1B5E20)
 
+
 @Composable
 fun LoginScreen(
     navController: NavController,
-    viewModel: AuthenticationViewModel,
-    googleAuthUiClient: GoogleAuthUiClient
+
+    googleAuthUiClient: GoogleAuthUiClient,
+    viewModel: AuthenticationViewModel = viewModel(
+        factory = AuthenticationViewModelFactory(googleAuthUiClient)
+    )
 ) {
     val context = LocalContext.current
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
     var passwordVisible by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
+
 
 
     val launcher = rememberLauncherForActivityResult(
@@ -62,6 +71,11 @@ fun LoginScreen(
                                 viewModel.getUserType(
                                     uid = authResult.user.uid,
                                     onResult = { userType ->
+                                        val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+                                        prefs.edit().putString("role", userType).apply()
+
+                                        val currentUser = authResult.user
+
                                         if (userType == "Consumer") {
                                             navController.navigate("ConsumerHomeScreen")
                                         } else if (userType == "Producer") {
@@ -81,8 +95,16 @@ fun LoginScreen(
                             }
 
                             is AuthResultStatus.Failure -> {
-                                Toast.makeText(context, authResult.message ?: "Authentication failed", Toast.LENGTH_LONG).show()
+                                val msg = authResult.message ?: "Authentication failed"
+                                if (msg.contains("exists with password", ignoreCase = true)) {
+                                    // Google credential needs to be linked into existing email/password account
+                                    // Pre-fill the email field so user knows which email to enter password for
+                                    email = account.email ?: ""
+                                } else {
+                                    Toast.makeText(context, msg, Toast.LENGTH_LONG).show()
+                                }
                             }
+
                         }
                     }
                 )
@@ -94,6 +116,11 @@ fun LoginScreen(
             Toast.makeText(context, "Google Sign-In Failed: ${e.message}", Toast.LENGTH_SHORT).show()
         }
     }
+
+
+
+
+
 
     Surface(
         modifier = Modifier.fillMaxSize(),
@@ -275,5 +302,3 @@ fun LoginScreen(
         }
     }
 }
-
-

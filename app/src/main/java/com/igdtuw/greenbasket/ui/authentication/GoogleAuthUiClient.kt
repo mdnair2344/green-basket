@@ -1,3 +1,4 @@
+//GoogleAuthUiClient
 package com.igdtuw.greenbasket.ui.authentication
 
 import android.content.Context
@@ -68,9 +69,33 @@ class GoogleAuthUiClient(
                     } ?: run {
                         onResult(AuthResultStatus.Failure("No user found"))
                     }
-                } else {
+                } /*else {
                     onResult(AuthResultStatus.Failure(task.exception?.message ?: "Sign-in failed"))
+                }*/
+                else {
+                    val exception = task.exception
+                    if (exception is FirebaseAuthUserCollisionException && exception.errorCode == "ERROR_ACCOUNT_EXISTS_WITH_DIFFERENT_CREDENTIAL") {
+                        // Email exists already — try linking
+                        val email = (exception as FirebaseAuthUserCollisionException).email
+                        if (email != null) {
+                            auth.fetchSignInMethodsForEmail(email)
+                                .addOnSuccessListener { result ->
+                                    val signInMethods = result.signInMethods ?: emptyList()
+                                    if ("password" in signInMethods) {
+                                        // Sign in with email/password first, then link Google
+                                        onResult(AuthResultStatus.Failure("This account exists with password. Please log in with email/password once, then Google Sign-In will work automatically."))
+                                    } else {
+                                        onResult(AuthResultStatus.Failure("Please use a different method to sign in."))
+                                    }
+                                }
+                        } else {
+                            onResult(AuthResultStatus.Failure("Email already in use. Please sign in with email/password."))
+                        }
+                    } else {
+                        onResult(AuthResultStatus.Failure(exception?.message ?: "Google Sign-In failed"))
+                    }
                 }
             }
-    }
+            }
+
 }

@@ -1,6 +1,9 @@
+//ProducerApp
 package com.igdtuw.greenbasket.ui.producer
 
 import android.content.Context
+import android.content.Intent
+import androidx.navigation.NavGraph.Companion.findStartDestination
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.compose.foundation.layout.Box
@@ -12,17 +15,21 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.*
 import androidx.navigation.navArgument
 import com.google.android.gms.auth.api.signin.GoogleSignInOptions
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
+import com.igdtuw.greenbasket.MainActivity
 import com.igdtuw.greenbasket.ui.theme.GreenBasketTheme
 import com.igdtuw.greenbasket.ProfileViewModel
 import com.igdtuw.greenbasket.R
 import com.igdtuw.greenbasket.UnderDevelopmentDialog
 import com.igdtuw.greenbasket.navigation.SplashScreen
+import com.igdtuw.greenbasket.ui.authentication.AuthenticationViewModel
+import com.igdtuw.greenbasket.ui.authentication.AuthenticationViewModelFactory
 import com.igdtuw.greenbasket.ui.authentication.GoogleAuthUiClient
 import com.igdtuw.greenbasket.ui.authentication.LoginScreen
 import com.igdtuw.greenbasket.ui.consumer.PolicyScreen
@@ -32,7 +39,8 @@ import kotlinx.coroutines.launch
 @RequiresApi(Build.VERSION_CODES.O)
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProducerApp() {
+fun ProducerApp()
+{
     val navController = rememberNavController()
 
     val context = LocalContext.current
@@ -101,9 +109,9 @@ fun ProducerApp() {
                         scope.launch { drawerState.close() }
                         navController.navigate("PendingOrdersScreen")
                     },
-                    onLiveChatClick = {
+                    onConsumersChatClick = {
                         scope.launch { drawerState.close() }
-                        navController.navigate("LiveChatScreen")
+                        navController.navigate("ConsumerChatsScreen")
                     },
                     onRestockClick = {
                         scope.launch { drawerState.close() }
@@ -190,8 +198,8 @@ fun ProducerApp() {
                     UnderDevelopmentDialog(navController)
                 }
 
-                composable("LiveChatScreen") {
-                    UnderDevelopmentDialog(navController)
+                composable("ConsumerChatsScreen") {
+                    ConsumerChatsScreen (onBack = { navController.popBackStack() })
                 }
 
                 composable("RestockScreen") {
@@ -199,7 +207,8 @@ fun ProducerApp() {
                 }
 
                 composable("NearbyProducersScreen") {
-                    UnderDevelopmentDialog(navController)
+                    //UnderDevelopmentDialog(navController)
+                    NearbyProducersScreen(onBack = { navController.popBackStack() })
                 }
 
                 composable("UploadMediaScreen") {
@@ -251,33 +260,72 @@ fun ProducerApp() {
 
 
                 composable("LoginScreen") {
+                    val viewModel: AuthenticationViewModel = viewModel(
+                        factory = AuthenticationViewModelFactory(googleAuthUiClient)
+                    )
                     LoginScreen(
                         navController = navController,
-                        viewModel = hiltViewModel(), // or your preferred ViewModel provider
+                        viewModel = viewModel, // or your preferred ViewModel provider
                         googleAuthUiClient = googleAuthUiClient // Inject or pass this
                     )
                 }
 
 
+
+
+
+                /*composable("logout") {
+                    val context = LocalContext.current
+
+                    LaunchedEffect(Unit) {
+                        FirebaseAuth.getInstance().signOut()
+                        val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+                        prefs.edit().clear().apply()
+
+                        delay(200)
+
+                        // Restart activity to trigger fresh NavGraph setup
+                        val intent = Intent(context, MainActivity::class.java)
+                        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                        context.startActivity(intent)
+                    }
+
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        CircularProgressIndicator()
+                    }
+                }*/
+
                 composable("logout") {
                     val context = LocalContext.current
 
                     LaunchedEffect(Unit) {
-                        FirebaseAuth.getInstance().signOut()  // ✅ Firebase logout
-                        val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
-                        prefs.edit().clear().apply()          // ✅ Clear prefs
+                        // Sign out the Firebase user (this also removes Google session)
+                        FirebaseAuth.getInstance().signOut()
 
-                        delay(200) // ⏳ Give FirebaseAuth time to reflect logout
-                        navController.navigate("LoginScreen") {
-                            popUpTo(navController.graph.startDestinationId) { inclusive = true }
-                            launchSingleTop = true
-                        }
+                        // Only remove role
+                        val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
+                        prefs.edit().remove("role").apply()
+
+                        delay(200)
+
+                        // Restart activity to clear backstack
+                        val intent = Intent(context, MainActivity::class.java)
+                        intent.flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK
+                        context.startActivity(intent)
                     }
 
-                    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    Box(
+                        modifier = Modifier.fillMaxSize(),
+                        contentAlignment = Alignment.Center
+                    ) {
                         CircularProgressIndicator()
                     }
                 }
+
+
 
             }
         }

@@ -1,3 +1,4 @@
+//App Gradle
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android") version "2.2.0"
@@ -91,8 +92,8 @@ dependencies {
 
 
 // Optional: For video playback
-    implementation("androidx.media3:media3-exoplayer:1.7.1")
-    implementation("androidx.media3:media3-ui:1.7.1")
+    implementation("androidx.media3:media3-exoplayer:1.8.0")
+    implementation("androidx.media3:media3-ui:1.8.0")
 
     // 🔹 Testing
     testImplementation(libs.junit)
@@ -126,6 +127,7 @@ dependencies {
 
     implementation("androidx.compose.ui:ui-text-google-fonts:1.8.3")
 
-
+    implementation("androidx.media3:media3-exoplayer:1.8.0")
+    implementation("androidx.media3:media3-ui:1.8.0")
 
 }

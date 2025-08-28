@@ -62,7 +62,7 @@ fun SetupNavGraph(
     googleAuthUiClient: GoogleAuthUiClient,
     startDestination: String
 ) {
-    val authViewModel: AuthenticationViewModel = viewModel()
+    val authViewModel: AuthenticationViewModel = viewModel(factory = AuthenticationViewModelFactory(googleAuthUiClient))
     NavHost(navController = navController, startDestination = startDestination) {
 
         composable("splash") {
@@ -73,7 +73,8 @@ fun SetupNavGraph(
         composable("SignUpScreen") {
             SignUpScreen(
                 navController = navController,
-                viewModel = authViewModel,
+                googleAuthUiClient = googleAuthUiClient,
+                viewModel = authViewModel
             )
         }
 
@@ -88,6 +89,7 @@ fun SetupNavGraph(
         composable("OtpVerificationScreen") {
             OtpVerificationScreen(
                 navController = navController,
+                googleAuthUiClient = googleAuthUiClient,
                 viewModel = authViewModel
             )
         }
@@ -96,9 +98,11 @@ fun SetupNavGraph(
             ConsumerApp()
         }
 
+
         composable("ProducerHomeScreen") {
             ProducerApp()
         }
+
         composable("forgot_password_screen") {
             ForgotPasswordScreen(navController)
         }
@@ -215,15 +219,3 @@ fun SplashScreen(navController: NavController) {
         )
     }
 }
-
-
-
-
-fun logout(context: Context) {
-    FirebaseAuth.getInstance().signOut()
-
-    // Clear stored role
-    val prefs = context.getSharedPreferences("user_prefs", Context.MODE_PRIVATE)
-    prefs.edit().clear().apply()
-}
-

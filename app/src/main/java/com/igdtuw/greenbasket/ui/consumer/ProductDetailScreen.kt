@@ -1,4 +1,3 @@
-//ProductDetailScreen
 package com.igdtuw.greenbasket.ui.consumer
 
 import android.widget.Toast
@@ -30,6 +29,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.content.Intent
+import android.net.Uri
+import android.content.pm.PackageManager
 import androidx.hilt.navigation.compose.hiltViewModel
 import androidx.media3.common.MediaItem
 import androidx.navigation.NavController
@@ -39,8 +41,8 @@ import com.igdtuw.greenbasket.ui.theme.ConsumerPrimaryVariant
 import kotlinx.coroutines.tasks.await
 import coil.compose.AsyncImage
 import com.google.firebase.Timestamp
-
 import androidx.compose.material3.Button
+import android.content.Context
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.ui.platform.LocalContext
@@ -48,7 +50,6 @@ import com.igdtuw.greenbasket.ui.theme.ConsumerCardBackground1
 import java.text.SimpleDateFormat
 import java.util.Locale
 import kotlin.math.roundToInt
-
 
 @Composable
 fun StarRatingBar(
@@ -74,9 +75,6 @@ fun StarRatingBar(
         }
     }
 }
-
-
-
 
 @Composable
 fun ReviewCard(review: Review, viewModel: ProductDetailViewModel) {
@@ -112,8 +110,6 @@ fun ReviewCard(review: Review, viewModel: ProductDetailViewModel) {
             }
 
             Spacer(modifier = Modifier.height(8.dp))
-
-
 
             Row {
                 repeat(5) { index ->
@@ -153,8 +149,47 @@ fun ReviewCarousel(reviews: List<Review>, viewModel: ProductDetailViewModel) {
         }
     }
 }
+fun makePhoneCall(context: Context, phoneNumber: String) {
+    val cleanNumber = phoneNumber.filter { it.isDigit() }
+    val callIntent = Intent(Intent.ACTION_DIAL).apply {
+        data = Uri.parse("tel:$cleanNumber")
+    }
+    context.startActivity(callIntent)
+}
+fun startVideoCall(context: Context, phone: String) {
+    val intent = Intent(Intent.ACTION_VIEW).apply {
+        data = Uri.parse("https://wa.me/$phone") // Can be replaced by another video call intent
+    }
+    context.startActivity(intent)
+}
+fun openChatOrSms(context: Context, phone: String, producerName: String) {
+    val cleanPhone = phone.filter { it.isDigit() }
+    val prefill = "Hi $producerName, I'm interested in discussing about your product."
 
+    val waUri = Uri.parse("https://wa.me/$cleanPhone?text=${Uri.encode(prefill)}")
+    val waIntent = Intent(Intent.ACTION_VIEW, waUri).apply {
+        setPackage("com.whatsapp")
+    }
 
+    try {
+        if (waIntent.resolveActivity(context.packageManager) != null) {
+            context.startActivity(waIntent)
+        } else {
+            // WhatsApp not installed or number not registered
+            val smsUri = Uri.parse("smsto:$cleanPhone")
+            val smsIntent = Intent(Intent.ACTION_SENDTO, smsUri).apply {
+                putExtra("sms_body", prefill)
+            }
+            if (smsIntent.resolveActivity(context.packageManager) != null) {
+                context.startActivity(smsIntent)
+            } else {
+                Toast.makeText(context, "No messaging app available", Toast.LENGTH_SHORT).show()
+            }
+        }
+    } catch (e: Exception) {
+        Toast.makeText(context, "Cannot open chat: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
+    }
+}
 
 @RequiresApi(Build.VERSION_CODES.O)
 @SuppressLint("StateFlowValueCalledInComposition")
@@ -274,7 +309,7 @@ fun ProductDetailScreen(
                                     contentDescription = null,
                                     modifier = Modifier
                                         .width(screenWidth),
-                                        //.height(250.dp),
+                                    //.height(250.dp),
                                     contentScale = ContentScale.FillWidth
                                 )
                             }
@@ -295,7 +330,6 @@ fun ProductDetailScreen(
 
                 // Action Buttons
                 item {
-
 
                     val isInCart = cartItems.any { it.product.id == crop.id }
                     val existingCartItem = cartItems.find { it.product.id == crop.id }
@@ -417,7 +451,7 @@ fun ProductDetailScreen(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .padding(horizontal = 16.dp, vertical = 4.dp),
-                            verticalAlignment = Alignment.CenterVertically,
+                            verticalAlignment = Alignment.Top,
                             horizontalArrangement = Arrangement.SpaceBetween
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
@@ -432,180 +466,205 @@ fun ProductDetailScreen(
                             }
 
                             Spacer(modifier = Modifier.width(12.dp))
-
-                            if (prod.imageUri.isNotBlank()) {
-                                AsyncImage(
-                                    model = prod.imageUri,
-                                    contentDescription = "Producer Profile Image",
-                                    modifier = Modifier
-                                        .size(150.dp)
-                                        .background(Color.LightGray, shape = RoundedCornerShape(30.dp)),
-                                    contentScale = ContentScale.Crop
-                                )
-                            } else {
-                                Icon(
-                                    imageVector = Icons.Default.Person,
-                                    contentDescription = "Default Profile Image",
-                                    modifier = Modifier
-                                        .size(60.dp)
-                                        .background(Color.LightGray, shape = RoundedCornerShape(30.dp)),
-                                    tint = Color.White
-                                )
-                            }
-                        }
-                    }
-
-
-                    // Certificates (if any)
-                if (certificates.isNotEmpty()) {
-                    item {
-                        Text(
-                            "Certificates",
-                            Modifier.padding(start = 16.dp, top = 4.dp)
-                            //style = MaterialTheme.typography.titleMedium
-                        )
-                    }
-                    item {
-                        LazyRow(contentPadding = PaddingValues(4.dp)) {
-                            items(certificates) { cert ->
-                                AsyncImage(
-                                    model = cert.certificateUrl,
-                                    contentDescription = "Certificate",
-                                    modifier = Modifier
-                                        .width(screenWidth)
-                                        //.height(200.dp)
-                                        .padding(end = 4.dp),
-                                    contentScale = ContentScale.FillWidth
-                                )
-                            }
-                        }
-                    }
-                }
-
-                // Review Submission
-                item {
-                    Column(Modifier.padding(16.dp)) {
-                        Text("Write a Review", style = MaterialTheme.typography.titleMedium)
-                        OutlinedTextField(
-                            value = reviewText,
-                            onValueChange = { reviewText = it },
-                            label = { Text("Your Review") },
-                            modifier = Modifier.fillMaxWidth()
-                        )
-                        Spacer(Modifier.height(8.dp))
-                        Text("Your Rating:")
-                        StarRatingBar(rating = rating, onRatingChanged = { rating = it })
-                        Spacer(Modifier.height(8.dp))
-                        Button(
-                            onClick = {
-                                viewModel.submitReview(crop.id, producerId, consumerId, reviewText, rating)
-                                reviewText = ""
-                                rating = 0
-                            },
-                            modifier = Modifier.align(Alignment.End),
-                            colors = ButtonDefaults.buttonColors(
-                                containerColor = ConsumerPrimaryVariant,
-                                contentColor = Color.White
-                            )
-
-                        ) {
-                            Text("Submit")
-                        }
-                    }
-                }
-
-                // Existing Reviews
-                item {
-                    Column {
-                        Text("Reviews", Modifier.padding(16.dp), style = MaterialTheme.typography.titleMedium)
-
-                        if (reviews.isNotEmpty()) {
-                            ReviewCarousel(reviews = reviews, viewModel = viewModel)
-                        } else {
-                            Text("No reviews yet.", Modifier.padding(horizontal = 16.dp))
-                        }
-                    }
-                }
-
-
-                item {
-                    Text(
-                        text = "Similar Products",
-                        style = MaterialTheme.typography.titleMedium,
-                        modifier = Modifier.padding(start = 16.dp, top = 24.dp)
-                    )
-
-                    LazyRow(
-                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
-                        horizontalArrangement = Arrangement.spacedBy(12.dp)
-                    ) {
-                        if (similarCrops.isEmpty()) {
-                            item {
-                                Text(
-                                    text = "No similar crops found.",
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    color = Color.Gray,
-                                    modifier = Modifier.padding(16.dp)
-                                )
-                            }
-                        } else {
-                            items(similarCrops) { similarCrop ->
-                                Card(
-                                    modifier = Modifier
-                                        .width(150.dp)
-                                        .height(180.dp),
-                                    shape = RoundedCornerShape(12.dp),
-                                    elevation = CardDefaults.cardElevation(4.dp),
-                                    colors = CardDefaults.cardColors(
-                                        containerColor = ConsumerCardBackground1
-                                    ),
-                                    onClick = {
-                                        navController.navigate("product_details/${similarCrop.producer}/${similarCrop.id}")
-                                    }
-                                ) {
-                                    Column(
+                            Column(horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center)
+                            {
+                                if (prod.imageUri.isNotBlank()) {
+                                    AsyncImage(
+                                        model = prod.imageUri,
+                                        contentDescription = "Producer Profile Image",
                                         modifier = Modifier
-                                            .fillMaxSize()
-                                            .padding(10.dp),
-                                        verticalArrangement = Arrangement.SpaceBetween,
-                                        horizontalAlignment = Alignment.CenterHorizontally
-                                    ) {
-                                        AsyncImage(
-                                            model = similarCrop.imageUri,
-                                            contentDescription = "Crop Image",
-                                            modifier = Modifier
-                                                .height(80.dp)
-                                                .fillMaxWidth(),
-                                            contentScale = ContentScale.Crop
+                                            .size(100.dp)
+                                            .background(
+                                                Color.LightGray,
+                                                shape = RoundedCornerShape(30.dp)
+                                            ),
+                                        contentScale = ContentScale.Crop
+                                    )
+                                } else {
+                                    Icon(
+                                        imageVector = Icons.Default.Person,
+                                        contentDescription = "Default Profile Image",
+                                        modifier = Modifier
+                                            .size(60.dp)
+                                            .background(
+                                                Color.LightGray,
+                                                shape = RoundedCornerShape(30.dp)
+                                            ),
+                                        tint = Color.White
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(8.dp))
+
+                                // Buttons for Call, Video Call, and Chat
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.padding(top = 8.dp)
+                                ) {
+                                    IconButton(onClick = {
+                                        makePhoneCall(context, prod.phone)
+                                    }) {
+                                        Icon(Icons.Default.Call, contentDescription = "Call")
+                                    }
+                                    IconButton(onClick = { startVideoCall(context, prod.phone) }) {
+                                        Icon(
+                                            Icons.Default.VideoCall,
+                                            contentDescription = "Video Call"
                                         )
-                                        Spacer(modifier = Modifier.height(8.dp))
-                                        Text(
-                                            text = similarCrop.name,
-                                            style = MaterialTheme.typography.titleSmall,
-                                            maxLines = 1,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                        Text(
-                                            text = "₹${similarCrop.pricePerKg}/kg",
-                                            style = MaterialTheme.typography.bodySmall,
-                                            color = Color.DarkGray
-                                        )
+                                    }
+                                    IconButton(onClick = {
+                                        openChatOrSms(context, prod.phone, prod.name)
+                                    }) {
+                                        Icon(Icons.Default.Chat, contentDescription = "Chat")
                                     }
                                 }
                             }
                         }
                     }
-                }
 
+                    // Certificates (if any)
+                    if (certificates.isNotEmpty()) {
+                        item {
+                            Text(
+                                "Certificates",
+                                Modifier.padding(start = 16.dp, top = 4.dp)
+                                //style = MaterialTheme.typography.titleMedium
+                            )
+                        }
+                        item {
+                            LazyRow(contentPadding = PaddingValues(4.dp)) {
+                                items(certificates) { cert ->
+                                    AsyncImage(
+                                        model = cert.certificateUrl,
+                                        contentDescription = "Certificate",
+                                        modifier = Modifier
+                                            .width(screenWidth)
+                                            //.height(200.dp)
+                                            .padding(end = 4.dp),
+                                        contentScale = ContentScale.FillWidth
+                                    )
+                                }
+                            }
+                        }
+                    }
+
+                    // Review Submission
+                    item {
+                        Column(Modifier.padding(16.dp)) {
+                            Text("Write a Review", style = MaterialTheme.typography.titleMedium)
+                            OutlinedTextField(
+                                value = reviewText,
+                                onValueChange = { reviewText = it },
+                                label = { Text("Your Review") },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(Modifier.height(8.dp))
+                            Text("Your Rating:")
+                            StarRatingBar(rating = rating, onRatingChanged = { rating = it })
+                            Spacer(Modifier.height(8.dp))
+                            Button(
+                                onClick = {
+                                    viewModel.submitReview(crop.id, producerId, consumerId, reviewText, rating)
+                                    reviewText = ""
+                                    rating = 0
+                                },
+                                modifier = Modifier.align(Alignment.End),
+                                colors = ButtonDefaults.buttonColors(
+                                    containerColor = ConsumerPrimaryVariant,
+                                    contentColor = Color.White
+                                )
+
+                            ) {
+                                Text("Submit")
+                            }
+                        }
+                    }
+
+                    // Existing Reviews
+                    item {
+                        Column {
+                            Text("Reviews", Modifier.padding(16.dp), style = MaterialTheme.typography.titleMedium)
+
+                            if (reviews.isNotEmpty()) {
+                                ReviewCarousel(reviews = reviews, viewModel = viewModel)
+                            } else {
+                                Text("No reviews yet.", Modifier.padding(horizontal = 16.dp))
+                            }
+                        }
+                    }
+
+
+                    item {
+                        Text(
+                            text = "Similar Products",
+                            style = MaterialTheme.typography.titleMedium,
+                            modifier = Modifier.padding(start = 16.dp, top = 24.dp)
+                        )
+
+                        LazyRow(
+                            contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            if (similarCrops.isEmpty()) {
+                                item {
+                                    Text(
+                                        text = "No similar crops found.",
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = Color.Gray,
+                                        modifier = Modifier.padding(16.dp)
+                                    )
+                                }
+                            } else {
+                                items(similarCrops) { similarCrop ->
+                                    Card(
+                                        modifier = Modifier
+                                            .width(150.dp)
+                                            .height(180.dp),
+                                        shape = RoundedCornerShape(12.dp),
+                                        elevation = CardDefaults.cardElevation(4.dp),
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = ConsumerCardBackground1
+                                        ),
+                                        onClick = {
+                                            navController.navigate("product_details/${similarCrop.producer}/${similarCrop.id}")
+                                        }
+                                    ) {
+                                        Column(
+                                            modifier = Modifier
+                                                .fillMaxSize()
+                                                .padding(10.dp),
+                                            verticalArrangement = Arrangement.SpaceBetween,
+                                            horizontalAlignment = Alignment.CenterHorizontally
+                                        ) {
+                                            AsyncImage(
+                                                model = similarCrop.imageUri,
+                                                contentDescription = "Crop Image",
+                                                modifier = Modifier
+                                                    .height(80.dp)
+                                                    .fillMaxWidth(),
+                                                contentScale = ContentScale.Crop
+                                            )
+                                            Spacer(modifier = Modifier.height(8.dp))
+                                            Text(
+                                                text = similarCrop.name,
+                                                style = MaterialTheme.typography.titleSmall,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                            Text(
+                                                text = "₹${similarCrop.pricePerKg}/kg",
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = Color.DarkGray
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+
+                }
             }
         }
     }
 }
-}
-
-
-
-
-
-
-

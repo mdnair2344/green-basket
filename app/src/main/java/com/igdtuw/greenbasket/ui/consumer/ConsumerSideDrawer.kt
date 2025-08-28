@@ -60,17 +60,22 @@ fun ConsumerSideDrawer(
     var firestoreName by remember { mutableStateOf<String?>(null) }
     var imageUri by remember { mutableStateOf<String?>(null) }
     // Fetch name from Firestore
-    LaunchedEffect(uid) {
-        uid?.let {
+    DisposableEffect(uid) {
+        if (uid == null) {
+            onDispose { }
+        } else {
             val db = FirebaseFirestore.getInstance()
-            try {
-                val doc = db.collection("users").document(uid).get().await()
-                firestoreName = doc.getString("name") ?: "User"
-                imageUri = doc.getString("imageUri")
-            } catch (e: Exception) {
-                firestoreName = "User"
-                imageUri = null
-            }
+            val registration = db.collection("users").document(uid)
+                .addSnapshotListener { snapshot, error ->
+                    if (error != null) {
+                        // optionally log error
+                        return@addSnapshotListener
+                    }
+                    firestoreName = snapshot?.getString("name") ?: "Consumer"
+                    val url = snapshot?.getString("imageUri")
+                    imageUri = if (url.isNullOrBlank()) null else url
+                }
+            onDispose { registration.remove() }
         }
     }
 

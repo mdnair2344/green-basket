@@ -1,12 +1,12 @@
-package com.igdtuw.greenbasket.ui.consumer
+package com.igdtuw.greenbasket.ui.producer
 
-import android.content.ActivityNotFoundException
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import com.igdtuw.greenbasket.ui.consumer.SharedViewModel
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -15,7 +15,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
-import com.igdtuw.greenbasket.NavControllerHolder.navController
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -26,35 +25,39 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
+import com.igdtuw.greenbasket.ui.consumer.CartWishlistActions
+import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.ktx.firestore
 import com.google.firebase.ktx.Firebase
+import com.igdtuw.greenbasket.NavControllerHolder.navController
 import com.igdtuw.greenbasket.ui.theme.ConsumerPrimaryVariant
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.tasks.await
 
-data class Producer(
+data class Consumer(
     val name: String = "",
-    val farmName: String = "",
     val phone: String = "",
     val imageUri: String = ""
 )
 
-fun makePhoneCall1(context: Context, phoneNumber: String) {
+fun makePhoneCall2(context: Context, phoneNumber: String) {
     val cleanNumber = phoneNumber.filter { it.isDigit() }
     val callIntent = Intent(Intent.ACTION_DIAL).apply {
         data = Uri.parse("tel:$cleanNumber")
     }
     context.startActivity(callIntent)
 }
-fun startVideoCall1(context: Context, phone: String) {
+
+fun startVideoCall2(context: Context, phone: String) {
     val intent = Intent(Intent.ACTION_VIEW).apply {
-        data = Uri.parse("https://wa.me/$phone") // Can be replaced by another video call intent
+        data = Uri.parse("https://wa.me/$phone")
     }
     context.startActivity(intent)
 }
-fun openChatOrSms1(context: Context, phone: String, producerName: String) {
+
+fun openChatOrSms2(context: Context, phone: String, consumerName: String) {
     val cleanPhone = phone.filter { it.isDigit() }
-    val prefill = "Hi $producerName, I'm interested in discussing about your product."
+    val prefill = "Hi $consumerName, I'm your producer from GreenBasket. Let’s connect."
 
     val waUri = Uri.parse("https://wa.me/$cleanPhone?text=${Uri.encode(prefill)}")
     val waIntent = Intent(Intent.ACTION_VIEW, waUri).apply {
@@ -65,7 +68,6 @@ fun openChatOrSms1(context: Context, phone: String, producerName: String) {
         if (waIntent.resolveActivity(context.packageManager) != null) {
             context.startActivity(waIntent)
         } else {
-            // WhatsApp not installed or number not registered
             val smsUri = Uri.parse("smsto:$cleanPhone")
             val smsIntent = Intent(Intent.ACTION_SENDTO, smsUri).apply {
                 putExtra("sms_body", prefill)
@@ -80,39 +82,46 @@ fun openChatOrSms1(context: Context, phone: String, producerName: String) {
         Toast.makeText(context, "Cannot open chat: ${e.localizedMessage}", Toast.LENGTH_SHORT).show()
     }
 }
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProducerChatsScreen(sharedViewModel: SharedViewModel,onBack: () -> Unit = {}) {
+fun ConsumerChatsScreen(onBack: () -> Unit = {}) {
     val firestore = Firebase.firestore
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
-    var producerList by remember { mutableStateOf<List<Producer>>(emptyList()) }
+    var consumerList by remember { mutableStateOf<List<Consumer>>(emptyList()) }
+    val currentProducerId = FirebaseAuth.getInstance().currentUser?.uid
 
-    // Fetch data
     LaunchedEffect(Unit) {
         scope.launch {
-            val uniqueProducerIds = mutableSetOf<String>()
-            val ordersSnapshot = firestore.collection("orders").get().await()
-            for (orderDoc in ordersSnapshot.documents) {
-                val producerId = orderDoc.getString("producerId")
-                if (!producerId.isNullOrEmpty()) uniqueProducerIds.add(producerId)
-            }
+            if (currentProducerId != null) {
+                val consumerIds = mutableSetOf<String>()
+                val ordersSnapshot = firestore.collection("orders")
+                    .whereEqualTo("producerId", currentProducerId)
+                    .get().await()
 
-            val producers = mutableListOf<Producer>()
-            for (producerId in uniqueProducerIds) {
-                val userSnapshot = firestore.collection("users").document(producerId).get().await()
-                if (userSnapshot.exists()) {
-                    producers.add(
-                        Producer(
-                            name = userSnapshot.getString("name") ?: "N/A",
-                            farmName = userSnapshot.getString("farmName") ?: "N/A",
-                            phone = userSnapshot.getString("phone") ?: "N/A",
-                            imageUri = userSnapshot.getString("imageUri") ?: ""
-                        )
-                    )
+                for (orderDoc in ordersSnapshot.documents) {
+                    val consumerId = orderDoc.getString("userId")
+                    if (!consumerId.isNullOrEmpty()) {
+                        consumerIds.add(consumerId)
+                    }
                 }
+
+                val consumers = mutableListOf<Consumer>()
+                for (consumerId in consumerIds) {
+                    val userSnapshot = firestore.collection("users").document(consumerId).get().await()
+                    if (userSnapshot.exists()) {
+                        consumers.add(
+                            Consumer(
+                                name = userSnapshot.getString("name") ?: "N/A",
+                                phone = userSnapshot.getString("phone") ?: "N/A",
+                                imageUri = userSnapshot.getString("imageUri") ?: ""
+                            )
+                        )
+                    }
+                }
+                consumerList = consumers
             }
-            producerList = producers
         }
     }
 
@@ -121,7 +130,7 @@ fun ProducerChatsScreen(sharedViewModel: SharedViewModel,onBack: () -> Unit = {}
             TopAppBar(
                 title = {
                     Text(
-                        text = "Chat with Producer",
+                        text = "Chat with Consumers",
                         color = Color.White,
                         style = MaterialTheme.typography.titleLarge,
                         fontWeight = FontWeight.Bold
@@ -131,9 +140,6 @@ fun ProducerChatsScreen(sharedViewModel: SharedViewModel,onBack: () -> Unit = {}
                     IconButton(onClick = onBack) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = Color.White)
                     }
-                },
-                actions = {
-                    CartWishlistActions(navController, sharedViewModel)
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = ConsumerPrimaryVariant)
             )
@@ -146,7 +152,7 @@ fun ProducerChatsScreen(sharedViewModel: SharedViewModel,onBack: () -> Unit = {}
                 .padding(12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            items(producerList) { prod ->
+            items(consumerList) { consumer ->
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     shape = RoundedCornerShape(16.dp),
@@ -158,10 +164,10 @@ fun ProducerChatsScreen(sharedViewModel: SharedViewModel,onBack: () -> Unit = {}
                             .padding(16.dp)
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            if (prod.imageUri.isNotBlank()) {
+                            if (consumer.imageUri.isNotBlank()) {
                                 AsyncImage(
-                                    model = prod.imageUri,
-                                    contentDescription = "Producer Image",
+                                    model = consumer.imageUri,
+                                    contentDescription = "Consumer Image",
                                     modifier = Modifier
                                         .size(60.dp)
                                         .clip(CircleShape)
@@ -184,9 +190,8 @@ fun ProducerChatsScreen(sharedViewModel: SharedViewModel,onBack: () -> Unit = {}
                             Spacer(modifier = Modifier.width(12.dp))
 
                             Column {
-                                Text(prod.name, fontWeight = FontWeight.Bold, fontSize = 18.sp)
-                                Text("Farm: ${prod.farmName}", fontSize = 14.sp, color = Color(0xFF1B5E20))
-                                Text("Phone: ${prod.phone}", fontSize = 13.sp)
+                                Text(consumer.name, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+                                Text("Phone: ${consumer.phone}", fontSize = 13.sp)
                             }
                         }
 
@@ -196,19 +201,14 @@ fun ProducerChatsScreen(sharedViewModel: SharedViewModel,onBack: () -> Unit = {}
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceEvenly
                         ) {
-                            IconButton(onClick = {
-                                makePhoneCall1(context, prod.phone)
-                            }) {
+                            IconButton(onClick = { makePhoneCall2(context, consumer.phone) }) {
                                 Icon(Icons.Default.Call, contentDescription = "Call")
                             }
-                            IconButton(onClick = { startVideoCall1(context, prod.phone) }) {
-                                Icon(
-                                    Icons.Default.VideoCall,
-                                    contentDescription = "Video Call"
-                                )
+                            IconButton(onClick = { startVideoCall2(context, consumer.phone) }) {
+                                Icon(Icons.Default.VideoCall, contentDescription = "Video Call")
                             }
                             IconButton(onClick = {
-                                openChatOrSms1(context, prod.phone, prod.name)
+                                openChatOrSms2(context, consumer.phone, consumer.name)
                             }) {
                                 Icon(Icons.Default.Chat, contentDescription = "Chat")
                             }

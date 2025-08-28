@@ -32,6 +32,7 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextDecoration
@@ -64,6 +65,8 @@ fun ProducerProfileScreen(
     val kycCompleted by kycViewModel.kycCompleted.collectAsState()
 
     val merchantStatus by viewModel.razorpayMerchantCreationStatus.collectAsState()
+    var showDeleteImageDialog by remember { mutableStateOf(false) }
+
 
 
 
@@ -93,6 +96,8 @@ fun ProducerProfileScreen(
     LaunchedEffect(user) {
         if (user.imageUri.isNotBlank()) {
             profileImageUri = Uri.parse(user.imageUri)
+        }else {
+            profileImageUri = null
         }
         viewModel.loadAccept5to10Status()
     }
@@ -122,33 +127,47 @@ fun ProducerProfileScreen(
         ) {
             val imageUrl = profileImageUri?.toString() ?: user.imageUri
 
-            if (!imageUrl.isNullOrBlank()) {
-                Image(
-                    painter = rememberAsyncImagePainter(model = imageUrl),
-                    contentDescription = "Profile Picture",
-                    modifier = Modifier
-                        .size(120.dp)
-                        .clip(CircleShape)
-                        .clickable {
-                            imagePickerLauncher.launch("image/*")
-                        },
-                    contentScale = ContentScale.Crop
-                )
-            } else {
-                Icon(
-                    imageVector = Icons.Default.AccountCircle,
-                    contentDescription = "Default Profile Picture",
-                    modifier = Modifier
-                        .size(120.dp)
-                        .clip(CircleShape)
-                        .clickable {
-                            imagePickerLauncher.launch("image/*")
-                        },
-                        //.background(ConsumerPrimaryVariant.copy(alpha = 0.5f)),
-                        //.padding(5.dp),
-                    tint = ConsumerCardBackground1
-                )
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                if (!imageUrl.isNullOrBlank()) {
+                    Image(
+                        painter = rememberAsyncImagePainter(model = imageUrl),
+                        contentDescription = "Profile Picture",
+                        modifier = Modifier
+                            .size(120.dp)
+                            .clip(CircleShape)
+                            .clickable { imagePickerLauncher.launch("image/*") },
+                        contentScale = ContentScale.Crop
+                    )
+                } else {
+                    Icon(
+                        imageVector = Icons.Default.AccountCircle,
+                        contentDescription = "Default Profile Picture",
+                        modifier = Modifier
+                            .size(120.dp)
+                            .clip(CircleShape)
+                            .clickable { imagePickerLauncher.launch("image/*") },
+                        tint = ConsumerCardBackground1
+                    )
+                }
+
+                Spacer(Modifier.width(12.dp))
+
+                // Bin (delete) button beside the circle
+                IconButton(
+                    onClick = { showDeleteImageDialog = true },
+                    enabled = (!imageUrl.isNullOrBlank())
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Delete,
+                        contentDescription = "Delete Profile Picture",
+                        tint = if (!imageUrl.isNullOrBlank()) Color.Red else Color.Gray
+                    )
+                }
             }
+
 
 
             TextButton(
@@ -158,6 +177,28 @@ fun ProducerProfileScreen(
             ) {
                 Text("Update Profile Picture", color = ConsumerPrimaryVariant)
             }
+
+            if (showDeleteImageDialog) {
+                AlertDialog(
+                    onDismissRequest = { showDeleteImageDialog = false },
+                    title = { Text("Delete profile picture?") },
+                    text = { Text("This will remove your photo from Firestore and from this screen.") },
+                    confirmButton = {
+                        TextButton(
+                            onClick = {
+                                viewModel.removeProfileImage(context) // your VM function
+                                profileImageUri = null                // clear local state so UI updates immediately
+                                showDeleteImageDialog = false
+                                Toast.makeText(context, "Profile picture removed", Toast.LENGTH_SHORT).show()
+                            }
+                        ) { Text("Delete", color = Color.Red) }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showDeleteImageDialog = false }) { Text("Cancel") }
+                    }
+                )
+            }
+
 
 
 
